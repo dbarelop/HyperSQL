@@ -507,7 +507,7 @@ def ScanFilesForObjects():
             # find package definitions - set flag if found
             # look for CREATE [OR REPLACE] PACKAGE BODY x, making sure enough tokens exist
             for token_index in range(len(token_list)):
-                if len(token_list) > token_index+3 \
+                if len(token_list) > token_index+2 \
                    and token_list[token_index].upper() in ['CREATE','REPLACE','FORCE'] \
                        and token_list[token_index+1].upper() == "PACKAGE":
                     if token_list[token_index+2].upper() == "BODY":
@@ -534,9 +534,30 @@ def ScanFilesForObjects():
                           file_info.packageInfoList.append(pi) # permanent storage
                           package_count += 1 # use this flag below
                     else:
-                        pks_count +=1
+                        package_info = PackageInfo()
+                        package_info.uniqueNumber = metaInfo.NextIndex()
+                        package_info.parent = file_info
+                        package_info.name = fixQuotedName(token_list[token_index+2])
+                        package_info.lineNumber = lineNumber+1
+                        for j in range(len(jdoc)):
+                          ln = jdoc[j].lineNumber - lineNumber
+                          if (package_info.name.lower()==jdoc[j].name.lower() and jdoc[j].objectType=='pkg') or (ln>0 and ln<metaInfo.blindOffset) or (ln<0 and ln>-1*metaInfo.blindOffset):
+                            package_info.javadoc = jdoc[j]
+                        if not package_info.javadoc.ignore: # ignore items with @ignore tag
+                            pi = package_info
+                            jd = pi.javadoc
+                            appendGlobalTasks('pkg',pi,jd,pi.uniqueNumber)
+                            mname = jd.name or pi.name
+                            mands = jd.verify_mandatory()
+                            for mand in mands:
+                              pi.verification.addItem(mname,mand)
+                            if JavaDocVars['javadoc_mandatory'] and package_info.javadoc.isDefault() and 'pkg' in JavaDocVars['javadoc_mandatory_objects']:
+                              logger.warn(_('Package %s has no JavaDoc information attached'), mname)
+                              pi.verification.addItem(mname,'No JavaDoc information available')
+                            file_info.packageInfoList.append(pi) # permanent storage
+                            package_count += 1 # use this flag below
 
-            if pks_count == -1: # ignore functions/procedures in package specifications
+            if pks_count == -1:
               # find functions
               for token_index in range(len(token_list)):
                 if token_list[token_index].upper() == 'FUNCTION' \
